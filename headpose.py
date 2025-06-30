@@ -1,6 +1,7 @@
 import cv2
 import mediapipe as mp
 import numpy as np
+import base64
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -66,13 +67,10 @@ def getHeadTilt_fp(x, y, z):
         tiltPose = "Right"
     elif x > 14:
         tiltPose = "Up"
-
     elif y > 7:  # Changed from 15 to 10 for more sensitivity
         tiltPose = "Left"
     elif x < -5:
         tiltPose = "Down"
-    
-        
     else:
         tiltPose = "Forward"
     return tiltPose
@@ -104,42 +102,56 @@ def pipelineHeadTiltPose(image, face_landmarks):
     
     return head_pose
 
-def analyze_head_pose_from_image(image_path):
+def analyze_head_pose_from_base64(image_base64):
     """
-    Analyze head pose from a JPG image
+    Analyze head pose from a base64 encoded image
     Returns: "Left", "Right", "Up", "Down", "Forward", or "No face detected"
     """
-    # Load image
-    image = cv2.imread(image_path)
-    if image is None:
-        return "Could not load image"
-    
-    # Initialize MediaPipe Face Mesh
-    with mp_face_mesh.FaceMesh(
-        static_image_mode=True,  # Important for single images
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=0.5) as face_mesh:
+    try:
+        # Decode base64 image
+        img_data = base64.b64decode(image_base64)
+        img_array = np.frombuffer(img_data, np.uint8)
+        image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         
-        # Convert BGR to RGB
-        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        if image is None:
+            return "Could not decode image"
         
-        # Process the image
-        results = face_mesh.process(rgb_image)
-        
-        if results.multi_face_landmarks:
-            face_landmarks = results.multi_face_landmarks[0]
-            head_pose = pipelineHeadTiltPose(image, face_landmarks)
+        # Initialize MediaPipe Face Mesh
+        with mp_face_mesh.FaceMesh(
+            static_image_mode=True,  # Important for single images
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5) as face_mesh:
             
+            # Convert BGR to RGB
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # Process the image
+            results = face_mesh.process(rgb_image)
+            
+            if results.multi_face_landmarks:
+                face_landmarks = results.multi_face_landmarks[0]
+                head_pose = pipelineHeadTiltPose(image, face_landmarks)
+                return head_pose
+            else:
+                return "No face detected"
+                
+    except Exception as e:
+        return f"Error processing image: {str(e)}"
 
-            
-            return head_pose
-        else:
-            return "No face detected"
+# Helper function to convert file to base64 (for testing)
+def file_to_base64(file_path):
+    with open(file_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
 
 # Usage example
 if __name__ == "__main__":
-    # Replace with your image path
-    image_path = "WIN_20250622_21_03_41_Pro.jpg"
-    result = analyze_head_pose_from_image(image_path)
+    # Example with base64 string
+    image_base64 = file_to_base64("left.jpg")
+    result = analyze_head_pose_from_base64(image_base64)
     print(f"Head pose: {result}")
+    
+    # Direct usage with base64 string
+    # result = analyze_head_pose_from_base64(your_base64_string)
+    # print(f"Head pose: {result}")
+    
