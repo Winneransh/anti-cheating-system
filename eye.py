@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import math
+import base64
 
 class GazeTracker:
     def __init__(self):
@@ -20,6 +21,16 @@ class GazeTracker:
         # Iris landmarks (MediaPipe provides these with refine_landmarks=True)
         self.LEFT_IRIS = [474, 475, 476, 477]
         self.RIGHT_IRIS = [469, 470, 471, 472]
+    
+    def decode_base64_image(self, image_base64):
+        """Decode base64 image to OpenCV format"""
+        try:
+            img_data = base64.b64decode(image_base64)
+            img_array = np.frombuffer(img_data, np.uint8)
+            image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            return image
+        except Exception as e:
+            return None
     
     def get_eye_landmarks(self, landmarks, eye_indices):
         """Extract eye landmarks as numpy array"""
@@ -84,12 +95,12 @@ class GazeTracker:
             else:
                 return "FORWARD"
     
-    def analyze_gaze(self, image_path):
-        """Main function to analyze gaze direction from an image"""
-        # Read image
-        image = cv2.imread(image_path)
+    def analyze_gaze_from_base64(self, image_base64):
+        """Main function to analyze gaze direction from a base64 image"""
+        # Decode base64 image
+        image = self.decode_base64_image(image_base64)
         if image is None:
-            return None, "Could not load image"
+            return None, "Could not decode base64 image"
         
         # Convert BGR to RGB
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -130,12 +141,12 @@ class GazeTracker:
         
         return result, "Success"
     
-    def analyze_and_visualize(self, image_path, output_path=None):
-        """Analyze gaze and optionally save visualization"""
-        # Read image
-        image = cv2.imread(image_path)
+    def analyze_and_visualize_from_base64(self, image_base64):
+        """Analyze gaze from base64 and return visualization as base64"""
+        # Decode base64 image
+        image = self.decode_base64_image(image_base64)
         if image is None:
-            return None, "Could not load image"
+            return None, None, "Could not decode base64 image"
         
         # Convert BGR to RGB for MediaPipe
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -144,13 +155,13 @@ class GazeTracker:
         results = self.face_mesh.process(rgb_image)
         
         if not results.multi_face_landmarks:
-            return None, "No face detected in the image"
+            return None, None, "No face detected in the image"
         
         # Analyze gaze
-        result, status = self.analyze_gaze(image_path)
+        result, status = self.analyze_gaze_from_base64(image_base64)
         
         if result is None:
-            return None, status
+            return None, None, status
         
         # Draw landmarks on image for visualization
         annotated_image = image.copy()
@@ -174,40 +185,77 @@ class GazeTracker:
         cv2.putText(annotated_image, f"Gaze: {result['gaze_direction']}", 
                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
         
+        # Encode annotated image back to base64
+        _, buffer = cv2.imencode('.jpg', annotated_image)
+        annotated_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        return result, annotated_base64, "Success"
+    
+    # Keep original methods for backward compatibility
+    def analyze_gaze(self, image_path):
+        """Original method for file path input - kept for backward compatibility"""
+        image = cv2.imread(image_path)
+        if image is None:
+            return None, "Could not load image"
+        
+        # Convert to base64 and use new method
+        _, buffer = cv2.imencode('.jpg', image)
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        return self.analyze_gaze_from_base64(image_base64)
+    
+    def analyze_and_visualize(self, image_path, output_path=None):
+        """Original method for file path input - kept for backward compatibility"""
+        image = cv2.imread(image_path)
+        if image is None:
+            return None, "Could not load image"
+        
+        # Convert to base64 and use new method
+        _, buffer = cv2.imencode('.jpg', image)
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+        
+        result, annotated_base64, status = self.analyze_and_visualize_from_base64(image_base64)
+        
+        if result is None:
+            return None, status
+        
+        # Convert base64 back to image
+        img_data = base64.b64decode(annotated_base64)
+        img_array = np.frombuffer(img_data, np.uint8)
+        annotated_image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        
         # Save visualization if output path provided
         if output_path:
             cv2.imwrite(output_path, annotated_image)
         
         return result, annotated_image
 
+# Helper function to convert file to base64 (for testing)
+def file_to_base64(file_path):
+    with open(file_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
 # Usage example
 def main():
     # Initialize the gaze tracker
     tracker = GazeTracker()
     
-    # Example usage
-    image_path = "WIN_20250622_21_03_41_Pro.jpg"  # Replace with your image path
+    # Example usage with base64
+    image_base64="" # Convert file to base64 for testing
     
-    # Simple analysis
-    result, status = tracker.analyze_gaze(image_path)
+    # Simple analysis with base64
+    result, status = tracker.analyze_gaze_from_base64(image_base64)
+    print(result['gaze_direction'])
     
-    if result:
-        print(f"Gaze Direction: {result['gaze_direction']}")
-        print(f"Left Eye - H: {result['left_eye_ratios']['horizontal']:.3f}, V: {result['left_eye_ratios']['vertical']:.3f}")
-        print(f"Right Eye - H: {result['right_eye_ratios']['horizontal']:.3f}, V: {result['right_eye_ratios']['vertical']:.3f}")
-        print(f"Average - H: {result['average_ratios']['horizontal']:.3f}, V: {result['average_ratios']['vertical']:.3f}")
-    else:
-        print(f"Error: {status}")
+
+    # result, annotated_base64, status = tracker.analyze_and_visualize_from_base64(image_base64)
     
-    # Analysis with visualization
-    result, annotated_image = tracker.analyze_and_visualize(image_path, "output_with_landmarks.jpg")
+    # if result:
+    #     print(f"\nGaze analysis completed. Annotated image available as base64.")
+    #     # You can save the annotated base64 image or use it directly
+    #     # To save: decode annotated_base64 and save using cv2.imwrite
     
-    if result:
-        print(f"\nVisualization saved to output_with_landmarks.jpg")
-        # Optionally display the image
-        # cv2.imshow('Gaze Analysis', annotated_image)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+    pass
 
 if __name__ == "__main__":
     main()
