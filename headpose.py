@@ -147,11 +147,9 @@ def file_to_base64(file_path):
 # Usage example
 if __name__ == "__main__":
     # Example with base64 string
-    image_base64 = file_to_base64("left.jpg")
-    result = analyze_head_pose_from_base64(image_base64)
-    print(f"Head pose: {result}")
+
     
     # Direct usage with base64 string
-    # result = analyze_head_pose_from_base64(your_base64_string)
-    # print(f"Head pose: {result}")
+    result = analyze_head_pose_from_base64(your_base64_string)
+    print(f"Head pose: {result}")
     
